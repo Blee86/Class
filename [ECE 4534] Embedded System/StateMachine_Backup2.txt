@@ -1,0 +1,127 @@
+		/*
+				uint8_t start;
+				uint8_t idle;		
+				uint8_t check_wall;
+				uint8_t move;
+				uint8_t idle2;
+				uint8_t check_distance;
+				uint8_t stop;
+				
+			*/
+						// Emergency Stop
+			if ( FrontSensor < 35 || LFsensor < 25 || RFsensor < 25 ) {
+				if ( currentState != stop && currentState != emergencyMove && currentState != idle3) {
+					roverCommand[0] = i2cCommandST;
+					
+					if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+						VT_HANDLE_FATAL_ERROR(0);
+					}
+					currentState = stop;
+				}
+			}
+			
+			/* State Machine */
+			if ( currentState == start ) {
+				sprintf(lcdBuffer, "State: START");
+				currentState = idle;
+			}
+			else if ( currentState == idle ) {
+				sprintf(lcdBuffer, "State: IDLE");
+				currentState = check_wall;
+			}
+			else if ( currentState == check_wall) {
+				if ( abs(FrontSensor - FrontSensor_prev) < 5 ) {
+					uint8_t distance = ((float)(FrontSensor - 45 )/ 1.6f);
+					if ( distance > 3 ) {
+						roverCommand[0] = i2cCommandMF;
+						roverCommand[1] = distance;			
+						sprintf(lcdBuffer, "State: CHECK_WALL - %d", distance);
+					}
+					else {
+						sprintf(lcdBuffer, "State: CHECK_WALL - Stop", distance);
+
+					}
+				currentState = move;	
+				}
+			}
+			else if ( currentState == move ) {
+				sprintf(lcdBuffer, "State: MOVE");
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+				currentState = idle2;
+			}
+			else if ( currentState == idle2 ) {
+				sprintf(lcdBuffer, "State: IDLE2");
+				// Wait til it stops
+				if ( abs(FrontSensor - FrontSensor_prev) < 10 ) {
+					currentState = check_distance2;
+				}
+			}
+			else if ( currentState == check_distance2 ) {
+				if ( abs(RFsensor_prev - RFsensor) < 5 ) {
+					int diff = RFsensor - RBsensor;
+					
+					if ( diff > 7 ) {
+						roverCommand[0] = 0xC2;
+						roverCommand[1] = 10;
+						sprintf(lcdBuffer, "State: CHECK_DISTANCE2 - R: %d", roverCommand[1]);
+						currentState = parallel;
+					}
+					else if ( diff < -7 ){
+						roverCommand[0] = 0xC3;
+						roverCommand[1] = 10;
+						sprintf(lcdBuffer, "State: CHECK_DISTANCE2 - L: %d", roverCommand[1]);
+						currentState = parallel;
+					}
+				}
+				
+			}
+			else if ( currentState == parallel ) {
+				sprintf(lcdBuffer, "State: PARALLEL");
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+				currentState = idle;
+			}
+			else if ( currentState == stop ) {
+					if ( FrontSensor < 35 ) {
+						sprintf(lcdBuffer, "State: STOP - move back");
+						roverCommand[0] = i2cCommandMB;
+						roverCommand[1] = 10;
+					}
+					else {
+						sprintf(lcdBuffer, "State: STOP - move Left");
+						roverCommand[0] = i2cCommandTL;
+						roverCommand[1] = 10;
+					}
+					currentState = emergencyMove;
+				}	
+			else if ( currentState == emergencyMove ) {
+				sprintf(lcdBuffer, "State: EMERGENCYMOVE");
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+				
+				currentState = idle3;
+			}
+			else if ( currentState == idle3 ) {
+				sprintf(lcdBuffer, "State: IDLE3");
+				// Wait til it stops
+				uint8_t diff = abs(FrontSensor - FrontSensor_prev);
+				if ( abs(FrontSensor_diff_prev-diff) < 3 ) {
+					currentState = start;
+				}
+
+				FrontSensor_diff_prev = diff;
+			}
+		
+			// Send LCD Message
+			if (SendLCDMsgStringDebug(lcdData, strnlen(lcdBuffer, vtLCDMaxLen), lcdBuffer, portMAX_DELAY) != pdTRUE) {
+				VT_HANDLE_FATAL_ERROR(0);
+			}
+			
+			FrontSensor_prev = FrontSensor;			
+			RFsensor_prev = RFsensor;
+			LFsensor_prev = LFsensor;
+			

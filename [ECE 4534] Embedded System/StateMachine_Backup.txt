@@ -1,0 +1,404 @@
+	if ( currentState == start ) {
+				sprintf(lcdBuffer, "State=Start");
+			 	if ( time_counter == 5 ) {
+				currentState = idle;
+				time_counter = 0;
+				}
+				
+				time_counter++;
+			}
+			else if ( currentState == idle) {
+				sprintf(lcdBuffer, "State = Idle");
+			 	currentState = check_sensors;
+			}
+			else if ( currentState == check_sensors) {
+					sprintf(lcdBuffer, "State = Check_Sensor");
+					if (SendLCDMsgStringDebug(lcdData, strnlen(lcdBuffer, vtLCDMaxLen), lcdBuffer, portMAX_DELAY) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+					}
+
+					//printf("F: %d, LF: %d, RF: %d \n", FrontSensor, LFsensor, RFsensor); 
+
+					uint8_t temp;  	// 0 - Front, 1- Left, 2- Right
+
+					if (FrontSensor > 40) FrontSensor = 0xff;
+					if (LFsensor > 40) FrontSensor = 0xff;
+					if (RFsensor > 40) FrontSensor = 0xff;
+
+					if ( FrontSensor == 0xff && LFsensor == 0xff && RFsensor == 0xff ) {
+						currentState = move;					
+					}
+
+					if (FrontSensor < LFsensor ) {
+						temp = 0;
+						if ( RFsensor < FrontSensor ) {
+							temp = 2;
+						}
+					} else {
+						temp = 1;
+						if ( RFsensor < LFsensor ) {
+							temp = 2;
+						}
+					}					
+
+					// Set Rover Command
+					switch(temp) {
+					case 0: {	// Front
+						sprintf(lcdBuffer, "Wall = Front");
+						roverCommand[0] = i2cCommandTL;
+						roverCommand[1] = 19;
+						break;
+					}
+					case 1:	{	// Left
+						sprintf(lcdBuffer, "Wall = Left");
+					    roverCommand[0] = i2cCommandTR;
+						roverCommand[1] = 19;
+																	   								 
+						break;
+					}
+					case 2:	{	// Right
+					sprintf(lcdBuffer, "Wall = Right");
+					    roverCommand[0] = i2cCommandST;
+						roverCommand[1] = 19;
+						break;
+					}
+					default: {
+						break;
+					}
+					}
+			   	 
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+				   
+				currentState = parallel;
+			} 
+			else if (currentState == parallel){
+				sprintf(lcdBuffer, "State = parallel");
+
+				// Check the Sensors on the Right side
+				int diff = RFsensor - RBsensor;
+				
+				if ( diff > 7 ) {
+					roverCommand[0] = i2cCommandTR;
+				    roverCommand[1] = 2;	
+					if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+						VT_HANDLE_FATAL_ERROR(0);
+					}
+				}
+				else if ( diff < -7 ) {
+				  	roverCommand[0] = i2cCommandTL;
+				    roverCommand[1] = 2;
+				   	if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+						VT_HANDLE_FATAL_ERROR(0);
+					}
+				}
+				else {
+					currentState = move;
+				}
+				
+
+				currentState = move;
+			}
+			else if (currentState == move){
+			  	if ( FrontSensor <= 255 && FrontSensor > 55) {
+					roverCommand[0] = i2cCommandMF;
+					roverCommand[1] = 10;
+					if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+						VT_HANDLE_FATAL_ERROR(0);
+					}
+				}
+				else {
+				 	currentState = stop;
+				}
+				sprintf(lcdBuffer, "State = Move");
+			}
+			else if (currentState == stop) {
+				sprintf(lcdBuffer, "Stop");
+				roverCommand[0] = i2cCommandST;
+				roverCommand[1] = 20;
+				
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+
+				currentState = idle;
+			}	
+			
+			
+			
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+
+// Yosub StateMachine 2
+	const uint8_t start = 0;
+	const uint8_t idle = 1;
+	const uint8_t check_direction = 2;
+	const uint8_t wall_on_right = 3;
+	const uint8_t idle2 = 9;
+	const uint8_t parallel = 4;
+	const uint8_t idle3 = 10;
+	const uint8_t move = 5;
+	const uint8_t check_sensors = 6;
+	const uint8_t stop = 7;
+	const uint8_t stop_change_direction = 8;
+	const uint8_t get_close_to_wall = 11;
+	const uint8_t face_Wall = 10;
+	
+	
+		if ( currentState == start ) {
+				sprintf(lcdBuffer, "State = Start");
+				
+				if ( time_counter == 5) {
+					currentState = idle;
+					time_counter = 0;
+				}
+				
+				time_counter ++;
+			}
+			else if ( currentState == idle) {
+				sprintf(lcdBuffer, "State = idle");
+				
+				currentState = check_direction;
+				
+			}
+			else if ( currentState == check_direction) {
+				sprintf(lcdBuffer, "State = Check_direction");
+				
+				if (SendLCDMsgStringDebug(lcdData, strnlen(lcdBuffer, vtLCDMaxLen), lcdBuffer, portMAX_DELAY) != pdTRUE) {
+				VT_HANDLE_FATAL_ERROR(0);
+				}
+
+				//printf("F: %d, LF: %d, RF: %d \n", FrontSensor, LFsensor, RFsensor); 
+
+				uint8_t temp;  	// 0 - Front, 1- Left, 2- Right
+
+				if ( FrontSensor == 0xff && LFsensor == 0xff && RFsensor == 0xff ) {
+					currentState = move;					
+				}
+				else {
+					// Find the closest wall
+					if (FrontSensor < LFsensor ) {
+						temp = 0;
+						if ( RFsensor < FrontSensor ) {
+							temp = 2;
+						}
+					} else {
+						temp = 1;
+						if ( RFsensor < LFsensor ) {
+							temp = 2;
+						}
+					}					
+			
+					switch(temp) {
+						case 0: {	// Front
+							sprintf(lcdBuffer, "Wall = Front");
+							
+							if ( FrontSensor < 50 ) {
+								roverCommand[0] = i2cCommandTL;
+								roverCommand[1] = 19;
+								
+							break;
+						}
+						case 1:	{	// Left
+							sprintf(lcdBuffer, "Wall = Left");
+							
+							roverCommand[0] = i2cCommandTR;
+							roverCommand[1] = 38;
+							break;
+						}
+						case 2:	{	// Right
+						sprintf(lcdBuffer, "Wall = Right");
+							roverCommand[0] = i2cCommandST;
+							roverCommand[1] = 19;
+
+							break;
+						}
+						default: {
+							break;
+						}
+						}
+					}
+					currentState = wall_on_right;
+				}
+				
+				
+			}
+			else if ( currentState == get_close_to_wall ) {
+				sprintf(lcdBuffer, "State = get_close");
+				roverCommand[0] = i2cCommandMF;
+				roverCommand[1] = 15;
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+				currentState = check_direction;
+			}
+			else if ( currentState == wall_on_right ) {
+				sprintf(lcdBuffer, "State = Wall On Right");
+				
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+
+				currentState = idle2;
+			}
+			else if ( currentState == idle2 ) {
+			sprintf(lcdBuffer, "State = idle2");
+				
+				if ( time_counter == 3 ) {
+					currentState = parallel;
+					time_counter = 0;
+				}
+				else {
+					time_counter++;
+				}
+			}
+			else if ( currentState == parallel ) {
+				sprintf(lcdBuffer, "State = parallel");
+
+				// Check the Sensors on the Right side
+				int diff = RFsensor - RBsensor;
+				
+				// Temporary
+				// Need to add: Care about negative result
+				/* int threshold = 3;
+				int limit = 7;
+				
+				int RFMax = RFsensor + threshold;	// 10  	|	3
+				int RFMin = RFsensor - threshold;	// 4 	|	-3
+				int RBMax = RBsensor + threshold;	// 3	|	10
+				int RBMin = RBsensor - threshold;	// -3	|	4
+				
+				int diff1_max = RFMax - RBMin;			// 13
+				int diff1_min = RFMin - RBMax;			// 1
+				int diff2_max = -1 * (RBMax - RFMin);	// -13
+				int diff2_min = -1 * (RBMin - RFMax);	// -1 */
+				
+				/*
+				//if ( (diff1_max > limit + threshold) && (diff1_min < limit - threshold) ) {
+				if ( diff > 4) {
+					roverCommand[0] = i2cCommandTRS;
+				    roverCommand[1] = 2;	
+					if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+						VT_HANDLE_FATAL_ERROR(0);
+					}
+				}
+				//else if (  (diff2_max < -1 * (limit + threshold)) && (diff1_min > -1 * (limit - threshold)) ) {
+				else if ( diff < -4 ) {
+				  	roverCommand[0] = i2cCommandTLS;
+				    roverCommand[1] = 2;
+				   	if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+						VT_HANDLE_FATAL_ERROR(0);
+					}
+				}
+				*/
+				if ( RFsensor < 50 ) {
+				if ( diff > 7 ) {
+					roverCommand[0] = 0xC2;
+				    roverCommand[1] = 3;	
+					if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+						VT_HANDLE_FATAL_ERROR(0);
+					}
+					currentState = idle2;
+				}
+				else if ( diff < -7 ) {
+				  	roverCommand[0] = 0xC3;
+				    roverCommand[1] = 3;
+				   	if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+						VT_HANDLE_FATAL_ERROR(0);
+					}
+					currentState = idle2;
+				}			
+				}			
+				currentState = move;		
+			}
+			else if ( currentState == move ) {
+				sprintf(lcdBuffer, "State = move");
+				
+				if (FrontSensor > 120) {
+					roverCommand[0] = i2cCommandMF;
+					roverCommand[1] = 30;
+				}
+				else {
+					roverCommand[0] = i2cCommandMF;
+					roverCommand[1] = 15;
+				}
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+				currentState = idle2;
+			}
+			else if ( currentState == stop ) {
+				sprintf(lcdBuffer, "State = stop");
+				
+				roverCommand[0] = i2cCommandST;
+				roverCommand[1] = 19;
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+				currentState = idle3;
+			}
+			else if ( currentState == idle3) {
+				sprintf(lcdBuffer, "State = idle3");		
+				currentState = stop_change_direction;
+			}
+			else if ( currentState == stop_change_direction ) {
+				sprintf(lcdBuffer, "State = stop_change_direction");
+				
+				roverCommand[0] = i2cCommandTL;
+				roverCommand[1] = 15;
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+				
+				currentState = idle2;	
+			}
+			
+			// Send LCD Message
+			if (SendLCDMsgStringDebug(lcdData, strnlen(lcdBuffer, vtLCDMaxLen), lcdBuffer, portMAX_DELAY) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+			}
+			
+			
+			
+Sensor Update MSG
+
+// Display received sensor data
+			FrontSensor = msgBuffer.buf[3];
+			RBsensor = msgBuffer.buf[0];
+			RFsensor = msgBuffer.buf[1];
+			LBsensor = msgBuffer.buf[4];
+			LFsensor = msgBuffer.buf[2];
+
+			if (lcdData != NULL) {
+				if(SendLCDMsgReceivedData(lcdData, msgBuffer.length, (char*) msgBuffer.buf, portMAX_DELAY) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+			}
+			
+			if ( FrontSensor < 35 && currentState == move ) {
+				roverCommand[0] = i2cCommandTL;
+				roverCommand[1] = 2;
+				
+				if (vtI2CEnQ(devPtr,I2CRoverCommand,0x4F,sizeof(roverCommand),roverCommand, 0) != pdTRUE) {
+					VT_HANDLE_FATAL_ERROR(0);
+				}
+		   		currentState = start;
+				//stop_flag = 1;
+			}
+			
+			
+			
+			
+			
+						uint8_t start;
+				uint8_t idle;		// Check Sensors
+				uint8_t check_wall;
+				uint8_t face_to_wall;
+				uint8_t check_distance;
+				uint8_t move_to_wall;
+				uint8_t wall_on_right;
+				uint8_t idle2;
+				uint8_t check_distance;
+				uint8_t move;
+				uint8_t stop;
