@@ -2,9 +2,11 @@ __author__ = 'yosublee86'
 
 """
     This program is designed to get the max temperature & the min temperature of
-    past 5 years from today. Collected data is sotred in JSON format.
+    past 5 years of today. The collected data is stored in JSON format.
     whenever this program runs it will generate a file named "outdoor_past.json"
-
+    
+    USAGE: Example)
+    >> python Outdoor_past.py -z 24060 -vv
     Author  : Yosub Lee
     Date    : 12/12/2014
 """
